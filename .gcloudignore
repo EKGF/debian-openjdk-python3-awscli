@@ -1,0 +1,4 @@
+.gitignore
+image.id
+*.flag
+*.code-workspace

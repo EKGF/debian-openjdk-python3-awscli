@@ -1,0 +1,5 @@
+*.flag
+image.id
+.gcloudignore
+.gitignore
+*.code-workspace
