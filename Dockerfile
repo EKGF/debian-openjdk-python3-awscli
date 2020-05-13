@@ -15,213 +15,121 @@
 #
 FROM openjdk:15-slim-buster
 
-#
-# We want the AWSCLI_VERSION and PYTHON_VERSION env vars to be available inside the container
-# which is why we're not using ARG here.
-#
-ENV AWSCLI_VERSION="1.18.56"
-#
-# Had to split up PYTHON_VERSION into two vars because kaniko can otherwise not optimize it
-#
-ENV PYTHON_VERSION="3.9.0"
-ENV PYTHON_VERSION_LONG="3.9.0a4"
+ENV YQ_VERSION="3.3.0"
 
 #
-# Copied from https://github.com/docker-library/python/blob/master/3.8/buster/Dockerfile
+#   This image runs on kubernetes in Google Cloud and on OpenShift. Ideally we have one
+#   strict setup with a non-root user in its own group but since OpenShift assigns the uid
+#   for you we cannot assume that our top level process runs with our assigned uid.
+#   What we do know however is that the Openshift assigned user id always has group 0 (the root group)
+#   so we're using the user ekggroup in group root for all non-openshift deployments.
 #
-ENV GPG_KEY E3FF2839C048B25C084DEBE9B26995E310250568
+#   See also https://www.openshift.com/blog/jupyter-on-openshift-part-6-running-as-an-assigned-user-id
+#   
+ARG UID=2000
+ENV HOME=/home/ekgprocess
+RUN useradd --system --no-user-group --home-dir /home/ekgprocess --create-home --shell /bin/bash --uid ${UID} --gid 0 ekgprocess && \
+    chgrp -Rf root /home/ekgprocess && chmod -Rf g+w /home/ekgprocess
 
-# ensure local python is preferred over distribution python
+
+#   Ensure that the local python is preferred over distribution python
 ENV PATH /usr/local/bin:$PATH
-# we're installing awscli in /app/.local/bin
-ENV PATH="/app/.local/bin:${PATH}"
+ENV LANG=C.UTF-8
 
 #
-# This hack is widely applied to avoid python printing issues in docker containers.
-# See: https://github.com/Docker-Hub-frolvlad/docker-alpine-python3/pull/13
+#   This hack is widely applied to avoid python printing issues in docker containers.
+#   See: https://github.com/Docker-Hub-frolvlad/docker-alpine-python3/pull/13
 #
 ENV PYTHONUNBUFFERED=1
 
 #
-# The two lines below are there to prevent a red line error to be shown about apt-utils not being installed
+#   The two lines below are there to prevent a red line error to be shown about apt-utils not being installed
 #
 ARG DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
 #
-# Install the python and awscli dependencies in one RUN statement
+#   Install the python and awscli dependencies in one RUN statement
 #
 RUN apt-get update -y -qq && \
     apt-get install -y -qq --no-install-recommends \
-      libbluetooth-dev \
-    	tk-dev \
+#       slim-buster doesn't have python 3.8+ yet	
+		python3.7 \
+		python3-pip \
+		python3-setuptools-git \
     	uuid-dev \
     	dirmngr \
     	gnupg \
     	less \
     	groff \
-    	ca-certificates \
+		netbase \
     	wget \
     	curl \
+		unzip \
     	jq \
     	rsync && \
-    rm -rf /var/lib/apt/lists/*
-
+	apt-get upgrade -y && \
+	apt-get dist-upgrade -y && \
+#   now we install yq
+    curl -L "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" -o /usr/bin/yq && \
+    chmod +x /usr/bin/yq && \
+    yq --version && \
+#   clean up before ending this RUN statement	
+    rm -rf /var/lib/apt/lists/* && \
+	(dpkg -l | grep python) && \
+	(cd /usr/bin && ln -s python3.7 python) && \
+	(cd /usr/bin && ln -s pip3 pip) && \
+	( \
+		set -x && \
+		python3 --version || true && \	
+		python3.7 --version || true && \
+		pip --version || true \
+	) && \
+#   create /home/ekgprocess/.cache and own it as root to avoid red warning messages during docker build
+	mkdir -p /home/ekgprocess/.cache && chown root /home/ekgprocess/.cache && \
+    python3 -m pip install --upgrade pip && \
+#   install wheel just to avoid all kinds of messages during docker build
+    python3 -m pip install wheel && \
+    python3 -m pip install rdflib && \
+    python3 -m pip install git+https://github.com/rdflib/sparqlwrapper#egg=sparqlwrapper && \
+    python3 -m pip install requests && \
+    python3 -m pip install boto3 && \
+    python3 -m pip install pystardog && \
+#   no more pip installs after this point so we can now remove the .cache directory
+    rm -rf /home/ekgprocess/.cache && \
 #
-# Install the c/c++ compiler and build tools in a separate RUN command, in preparation of moving this to a
-# multi-stage Dockerfile, we don't want to keep carrying around the C compiler.
+#   Install awscli version 2 in /app/.local/bin (that's what the --user option does)
 #
-# This RUN statement has been copied 1 to 1 from:
-# https://github.com/docker-library/buildpack-deps/blob/master/buster/Dockerfile#L3
+	mkdir -p /home/ekgprocess/awscli-download && cd /home/ekgprocess/awscli-download && \
+	curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \
+	unzip -q "awscliv2.zip" && \
+	rm -f "awscliv2.zip" && \
+	./aws/install && \
+#   now clean up and delete awscli stuff we don't need in an image
+	cd /home/ekgprocess && rm -rf awscli-download && \
+	rm -rf /usr/local/aws-cli/v2/current/dist/awscli/examples && \
+	rm -rf /usr/local/aws-cli/v2/current/dist/awscli/topics && \
+	( \
+		set -x && \
+		aws --version \
+	) && \
 #
-RUN set -ex; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
-		autoconf \
-		automake \
-		bzip2 \
-		dpkg-dev \
-		file \
-		g++ \
-		gcc \
-		imagemagick \
-		libbz2-dev \
-		libc6-dev \
-		libcurl4-openssl-dev \
-		libdb-dev \
-		libevent-dev \
-		libffi-dev \
-		libgdbm-dev \
-		libglib2.0-dev \
-		libgmp-dev \
-		libjpeg-dev \
-		libkrb5-dev \
-		liblzma-dev \
-		libmagickcore-dev \
-		libmagickwand-dev \
-		libmaxminddb-dev \
-		libncurses5-dev \
-		libncursesw5-dev \
-		libpng-dev \
-		libpq-dev \
-		libreadline-dev \
-		libsqlite3-dev \
-		libssl-dev \
-		libtool \
-		libwebp-dev \
-		libxml2-dev \
-		libxslt-dev \
-		libyaml-dev \
-		make \
-		patch \
-		unzip \
-		xz-utils \
-		zlib1g-dev \
-		\
-# https://lists.debian.org/debian-devel-announce/2016/09/msg00000.html
-		$( \
-# if we use just "apt-cache show" here, it returns zero because "Can't select versions from package 'libmysqlclient-dev' as it is purely virtual", hence the pipe to grep
-			if apt-cache show 'default-libmysqlclient-dev' 2>/dev/null | grep -q '^Version:'; then \
-				echo 'default-libmysqlclient-dev'; \
-			else \
-				echo 'libmysqlclient-dev'; \
-			fi \
-		) \
-	; \
-	rm -rf /var/lib/apt/lists/*
-
+#   now the final clean up, making the image as small as possible
 #
-# Install Python 3. Copy pasted this section straight from
-# https://github.com/docker-library/python/blob/master/3.8/buster/Dockerfile#L26
-#
-RUN set -ex \
-	&& wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-$PYTHON_VERSION_LONG.tar.xz" \
-	&& wget -O python.tar.xz.asc "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-$PYTHON_VERSION_LONG.tar.xz.asc" \
-	&& export GNUPGHOME="$(mktemp -d)" \
-	&& gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys "$GPG_KEY" \
-	&& gpg --batch --verify python.tar.xz.asc python.tar.xz \
-	&& { command -v gpgconf > /dev/null && gpgconf --kill all || :; } \
-	&& rm -rf "$GNUPGHOME" python.tar.xz.asc \
-	&& mkdir -p /usr/src/python \
-	&& tar -xJC /usr/src/python --strip-components=1 -f python.tar.xz \
-	&& rm python.tar.xz \
-	\
-	&& cd /usr/src/python \
-	&& gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)" \
-	&& ./configure \
-		--build="$gnuArch" \
-		--enable-loadable-sqlite-extensions \
-		--enable-optimizations \
-		--enable-option-checking=fatal \
-		--enable-shared \
-		--with-system-expat \
-		--with-system-ffi \
-		--without-ensurepip \
-	&& make -j "$(nproc)" \
-	&& make install \
-	&& ldconfig \
-	\
-#	&& find /usr/local -depth \
-#		\( \
-#			\( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
-#			-o \
-#			\( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
-#		\) -exec rm -rf '{}' + \
-	&& rm -rf /usr/src/python \
-	\
-	&& python3 --version
-
-# make some useful symlinks that are expected to exist
-RUN cd /usr/local/bin \
-	&& ln -s idle3 idle \
-	&& ln -s pydoc3 pydoc \
-	&& ln -s python3 python \
-	&& ln -s python3-config python-config
-
-# if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
-ENV PYTHON_PIP_VERSION 20.0.2
-# https://github.com/pypa/get-pip
-ENV PYTHON_GET_PIP_URL https://github.com/pypa/get-pip/raw/d59197a3c169cef378a22428a3fa99d33e080a5d/get-pip.py
-ENV PYTHON_GET_PIP_SHA256 421ac1d44c0cf9730a088e337867d974b91bdce4ea2636099275071878cc189e
-
-RUN set -ex; \
-	\
-	wget -O get-pip.py "$PYTHON_GET_PIP_URL"; \
-	echo "$PYTHON_GET_PIP_SHA256 *get-pip.py" | sha256sum --check --strict -; \
-	\
-	python get-pip.py \
-		--disable-pip-version-check \
-		--no-cache-dir \
-		"pip==$PYTHON_PIP_VERSION" \
-	; \
-	pip --version; \
-	\
-	find /usr/local -depth \
-		\( \
-			\( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
-			-o \
-			\( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
-		\) -exec rm -rf '{}' +; \
-	rm -f get-pip.py
-
-#
-# Install awscli in /app/.local/bin (that's what the --user option does)
-#
-RUN \
-    apt-get update && \
-    apt-get install -y -qq git 2> >( grep -v 'since apt-utils is not installed' >&2 ) && \
-    pip install --upgrade pip && \
-    pip install awscli==$AWSCLI_VERSION  && \
-    pip install rdflib && \
-    pip install git+https://github.com/rdflib/sparqlwrapper#egg=sparqlwrapper && \
-    pip install requests && \
-    pip install boto3 && \
-    pip install pystardog && \
-    set -x && \
     apt-get --purge -y remove git && \
     apt-get --purge -y autoremove && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /app/.aws
+#
+#   just to be sure, everything we added to the home directory is owned by user ekgprocess
+#   and group root (see openshift comments at the top of this dockerfile)
+#
+	cd /home/ekgprocess && \
+	chown -vR ekgprocess:root .
 
-WORKDIR /app/
+#
+# 	now we leave the image to run as user ekgprocess from its home directory
+#
+USER ekgprocess
+WORKDIR /home/ekgprocess
+ENTRYPOINT [ "/bin/bash" ]

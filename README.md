@@ -10,23 +10,17 @@ Unfortunately we have to combine Java and Python in one base image.
 This image is needed for containers that run a JVM process and also
 use the AWS CLI from Bash scripts.
 
-## Build
+Utilities in this image:
 
-### Build in Google Cloud
+- jq (for processing JSON)
+- curl & wget (for executing HTTP commands)
+- git
+- rsync
 
-Log in to Google Cloud first using the command: `gcloud auth login`.
+Python libraries:
 
-Then use the `build.sh` script to build it.
-This script will build the image in Google Cloud and publish
-it under the names:
-
- - `gcr.io/lgt-ekg/debian-openjdk-python3-awscli:0.3.2`
- - `gcr.io/lgt-ekg/debian-openjdk-python3-awscli:latest`
-
-### Build on Mac OS X
-
-TODO
-
-### Build on OpenShift
-
-TODO
+- awscli
+- rdflib
+- pystardog
+- requests
+- boto3
