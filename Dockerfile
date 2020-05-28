@@ -95,6 +95,12 @@ RUN apt-get update -y -qq && \
     python3 -m pip install requests && \
     python3 -m pip install boto3 && \
     python3 -m pip install pystardog && \
+    python3 -m pip install owlrl && \
+    python3 -m pip install pandas && \
+    python3 -m pip install stringcase && \
+    python3 -m pip install unidecode && \
+    python3 -m pip install humps && \
+    python3 -m pip install xlrd && \
 #   no more pip installs after this point so we can now remove the .cache directory
     rm -rf /home/ekgprocess/.cache && \
 #

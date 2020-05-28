@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 _IMAGE_NAME="docker.io/ekgf/debian-openjdk-python3-awscli"
 _IMAGE_VERSION="latest"
-_MANUALLY_INCREMENTED_IMAGE_VERSION="0.0.2"
+_MANUALLY_INCREMENTED_IMAGE_VERSION="0.0.3"
 
 docker build . \
   --iidfile=image.id \
