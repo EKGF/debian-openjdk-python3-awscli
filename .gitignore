@@ -1,0 +1,4 @@
+image.id
+cloudbuild*
+*.flag
+*.code-workspace
