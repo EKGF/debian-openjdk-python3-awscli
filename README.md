@@ -13,10 +13,22 @@ use the AWS CLI from Bash scripts.
 Utilities in this image:
 
 - jq (for processing JSON)
+- yq (for processing YAML)
 - curl & wget (for executing HTTP commands)
 - git
 - rsync
 - awscli
+- uuid-dev
+- dirmngr
+- gnupg
+- less
+- groff
+- ca-certificates
+- netbase
+- unzip
+- krb5-user
+- krb5-config
+- libgssapi-krb5-2 
 
 Python libraries:
 
@@ -32,3 +44,7 @@ Python libraries:
 - unidecode
 - humps
 - xlrd
+- ldap3
+- gssapi
+
+

@@ -62,12 +62,18 @@ RUN apt-get update -y -qq && \
     	gnupg \
     	less \
     	groff \
+		ca-certificates \
 		netbase \
+		git \
     	wget \
     	curl \
 		unzip \
     	jq \
-    	rsync && \
+    	rsync \
+# 		python3-gssapi \
+# 		krb5-user \
+# 		libkrb5-dev \
+    	&& \
 	apt-get upgrade -y && \
 	apt-get dist-upgrade -y && \
 #   now we install yq
@@ -101,6 +107,8 @@ RUN apt-get update -y -qq && \
     python3 -m pip install unidecode && \
     python3 -m pip install humps && \
     python3 -m pip install xlrd && \
+    python3 -m pip install ldap3 && \
+#   python3 -m pip install gssapi && \
 #   no more pip installs after this point so we can now remove the .cache directory
     rm -rf /home/ekgprocess/.cache && \
 #
