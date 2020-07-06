@@ -1,5 +1,5 @@
 #
-# debian-awscli is a lightweight base image that has bash, python3 and the AWS CLI on board (for S3 access)
+# debian-openjdk-python3-awscli is a lightweight base image that has openjdk, bash, python3 and the AWS CLI on board (for S3 access)
 #
 # We switched from Alpine to Debian for this image due to these two articles:
 # - https://pythonspeed.com/articles/base-image-python-docker-images/
@@ -15,7 +15,7 @@
 #
 FROM openjdk:15-slim-buster
 
-ENV YQ_VERSION="3.3.0"
+ENV YQ_VERSION="3.3.2"
 
 #
 #   This image runs on kubernetes in Google Cloud and on OpenShift. Ideally we have one
@@ -96,18 +96,27 @@ RUN apt-get update -y -qq && \
     python3 -m pip install --upgrade pip && \
 #   install wheel just to avoid all kinds of messages during docker build
     python3 -m pip install wheel && \
+    python3 -m pip install setuptools && \
     python3 -m pip install rdflib && \
     python3 -m pip install git+https://github.com/rdflib/sparqlwrapper#egg=sparqlwrapper && \
-    python3 -m pip install requests && \
+    python3 -m pip install git+https://github.com/ekgf/ekglib@3fe4283a27c62bb2f8478944c2c4a00fce5e5ad6#egg=ekglib && \
+#   most of the packages below are already pulled in by ekglib
+#   but keeping these lines here just for documentation purposes    
     python3 -m pip install boto3 && \
-    python3 -m pip install pystardog && \
+    python3 -m pip install botocore && \
     python3 -m pip install owlrl && \
     python3 -m pip install pandas && \
+    python3 -m pip install python-dateutil && \
+    python3 -m pip install requests && \
+    python3 -m pip install six && \
     python3 -m pip install stringcase && \
-    python3 -m pip install unidecode && \
     python3 -m pip install humps && \
-    python3 -m pip install xlrd && \
+    python3 -m pip install argparse && \
+    python3 -m pip install inflection && \
     python3 -m pip install ldap3 && \
+    python3 -m pip install xlrd && \
+    python3 -m pip install pystardog && \
+    python3 -m pip install unidecode && \
 #   python3 -m pip install gssapi && \
 #   no more pip installs after this point so we can now remove the .cache directory
     rm -rf /home/ekgprocess/.cache && \
